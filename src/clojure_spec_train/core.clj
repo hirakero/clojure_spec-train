@@ -58,8 +58,96 @@
                :ex (s/alt :odd ::odd? :even ::even?)))
 (s/conform s1 [42 11 13 15 {:a 1 :b 2 :c 3} 1 2 3 42 43 44 11])
 #_{:forty-two 42
- :odds [11 13 15]
- :m {:a 1, :b 2, :c 3}
- :oes [{:o 1, :e 2} {:o 3, :e 42} {:o 43, :e 44}]
- :ex [:odd 11]}
+   :odds [11 13 15]
+   :m {:a 1, :b 2, :c 3}
+   :oes [{:o 1, :e 2} {:o 3, :e 42} {:o 43, :e 44}]
+   :ex [:odd 11]}
+
+
+(defn test-fn [m])
+
+;; https://clojure.org/guides/spec
+;; Predicates
+
+; Clojureの述語関数は、暗黙的にspecに変換される
+; confirmは関数は、specとデータ値を取ります。
+; 戻り値は適合値
+; 値が適合していない場合は、特別な値:clojure.spec.alpha/invalidが返されます。
+(s/conform even? 100) ;-> 100
+
+;valid? ブール値を返す
+(s/valid? even? 10) ;;=> true
+
+(s/valid? nil? nil)  ;; true
+(s/valid? string? "abc")  ;; true
+
+(s/valid? #(> % 5) 10) ;; true
+(s/valid? #(> % 5) 0) ;; false
+
+(import java.util.Date)
+(s/valid? inst? (Date.))  ;; true
+
+;セットは、1つ以上のリテラル値に一致する述語としても使用できます。
+(s/valid? #{:club :diamond :heart :spade} :club) ;; true
+(s/valid? #{:club :diamond :heart :spade} 42) ;; false
+
+(s/valid? #{42} 42) ;; true
+
+;;Registry
+
+;specは、再利用可能な仕様をグローバルに宣言するための中央レジストリを提供します。
+;レジストリは、名前空間付きキーワードをspecに関連付けます。
+;名前空間を使用すると、ライブラリまたはアプリケーション間で再利用可能な競合しないspecを確実に定義できます。
+
+;specはs / defを使用して登録されます。
+(s/def :order/date inst?)
+(s/def :deck/suit #{:club :diamond :heart :spade})
+
+(s/valid? :order/date (Date.));;=> true
+(s/conform :deck/suit :club);;=> :club
+
+;docでspecの内容を確認できます。
+(clojure.repl/doc :order/date)
+"-------------------------
+:order/date
+Spec
+  inst?"
+(clojure.repl/doc :deck/suit)
+":deck/suit
+Spec
+  #{:spade :heart :diamond :club}"
+
+;; Composing predicates
+; 仕様を作成する最も簡単な方法は、andおよびorを使用することです。
+(s/def :num/big-even (s/and even? #(> % 1000)))
+(s/valid? :num/big-even :foo) ;; ->false
+(s/valid? :num/big-even 10) ;; ->false
+(s/valid? :num/big-even 100000) ;; ->true
+
+(s/def :domain/name-or-id (s/or :name string? :id   int?))
+(s/valid? :domain/name-or-id "abc") ;; ->true
+(s/valid? :domain/name-or-id 100) ;; ->true
+(s/valid? :domain/name-or-id :foo) ;; ->false
+
+; 各選択肢にはタグ（ここでは：nameと：idの間）が注釈として付けられ、
+;これらのタグは、conformおよびその他のspec関数から返される
+(s/conform :domain/name-or-id "abc");;=> [:name "abc"]
+(s/conform :domain/name-or-id 100);;=> [:id 100]
+
+;インスタンスのタイプをチェックする多くの述語は、有効な値としてnilを許可しません
+;有効な値としてnilを含めるには、提供されている関数nilableを使用して仕様を作成します。
+(s/valid? string? nil);;=> false
+(s/valid? (s/nilable string?) nil);;=> true
+
+;; Explain
+;Explainは、値が仕様に準拠していない理由を *out* に出力します。
+(s/explain :deck/suit 42)
+; 42 - failed: #{:spade :heart :diamond :club} spec: :deck/suit
+(s/explain :num/big-even 5)
+;; 5 - failed: even? spec: :num/big-even
+(s/explain :num/big-even 6)
+;; 6 - failed: (> % 1000) spec: :num/big-even
+(s/explain :domain/name-or-id :foo)
+;; :foo - failed: string? at: [:name] spec: :domain/name-or-id
+;; :foo - failed: int? at: [:id] spec: :domain/name-or-id
 
